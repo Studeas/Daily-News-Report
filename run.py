@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-新闻爬取与AI处理完整工作流程
-串联 crawl.py 和 process_with_ai.py 的功能
+Complete workflow for news crawling and AI processing
+Chains together crawl.py and process_with_ai.py functionality
 """
 
 import os
@@ -11,7 +11,7 @@ from datetime import datetime
 import time
 
 class TeeOutput:
-    """同时输出到终端和文件的类"""
+    """Class to output to both terminal and file simultaneously"""
     def __init__(self, file_path):
         self.terminal = sys.stdout
         self.log_file = open(file_path, 'w', encoding='utf-8')
@@ -31,13 +31,13 @@ class TeeOutput:
             self.log_file.close()
 
 def run_crawl():
-    """执行爬虫脚本"""
+    """Execute crawler script"""
     print("=" * 60)
     print("步骤 1/2: 新闻爬取")
     print("=" * 60)
     
     try:
-        # 直接执行 crawl.py
+        # Directly execute crawl.py
         result = subprocess.run(
             [sys.executable, 'crawl.py'],
             cwd=os.path.dirname(os.path.abspath(__file__)),
@@ -54,13 +54,13 @@ def run_crawl():
         return False
 
 def run_ai_processing():
-    """执行AI处理脚本"""
+    """Execute AI processing script"""
     print("\n" + "=" * 60)
     print("步骤 2/2: AI处理与报告生成")
     print("=" * 60)
     
     try:
-        # 导入并执行 process_with_ai 的 main 函数
+        # Import and execute main function from process_with_ai
         from process_with_ai import main as process_main
         process_main()
         print("\n✓ AI处理完成")
@@ -73,18 +73,18 @@ def run_ai_processing():
         return False
 
 def main():
-    """主函数：执行完整工作流程"""
+    """Main function: execute complete workflow"""
     start_time = datetime.now()
     
-    # 创建日志目录
+    # Create log directory
     log_dir = 'log'
     os.makedirs(log_dir, exist_ok=True)
     
-    # 创建日志文件（使用时间戳命名）
+    # Create log file (named with timestamp)
     timestamp = start_time.strftime('%Y%m%d_%H%M%S')
     log_file_path = os.path.join(log_dir, f'run_{timestamp}.log')
     
-    # 设置同时输出到终端和文件
+    # Set up simultaneous output to terminal and file
     tee = TeeOutput(log_file_path)
     original_stdout = sys.stdout
     original_stderr = sys.stderr
@@ -100,19 +100,19 @@ def main():
         print(f"日志文件: {log_file_path}")
         print()
         
-        # 步骤1: 爬取新闻
+        # Step 1: Crawl news
         crawl_success = run_crawl()
         
         if not crawl_success:
             print("\n⚠️  爬取失败，但继续尝试AI处理（如果有已存在的文章文件）...")
         
-        # 等待一小段时间，确保文件已写入
+        # Wait a short time to ensure file is written
         time.sleep(2)
         
-        # 步骤2: AI处理
+        # Step 2: AI processing
         ai_success = run_ai_processing()
         
-        # 总结
+        # Summary
         end_time = datetime.now()
         duration = end_time - start_time
         
@@ -150,7 +150,7 @@ def main():
             print(f"\n📝 完整日志已保存到: {log_file_path}")
             exit_code = 2
         
-        # 发送邮件（如果配置了邮件）
+        # Send email (if email is configured)
         try:
             from send_email import send_report_email
             print("\n" + "=" * 60)
@@ -165,7 +165,7 @@ def main():
         return exit_code
     
     finally:
-        # 恢复标准输出
+        # Restore standard output
         sys.stdout = original_stdout
         sys.stderr = original_stderr
         tee.close()

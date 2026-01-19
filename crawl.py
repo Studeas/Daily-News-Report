@@ -9,7 +9,7 @@ import os
 
 LIMIT_NUM = 25
 
-# 新闻平台首页列表
+# List of news platform homepages
 homepage_urls = [
     'https://punchng.com/',
     'https://dailypost.ng/',
@@ -18,7 +18,7 @@ homepage_urls = [
     # 'https://guardian.ng/'
 ]
 
-# 设置请求头，模拟浏览器访问以避免 403 错误
+# Set request headers to simulate browser access and avoid 403 errors
 headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -31,27 +31,27 @@ request_args = {'headers': headers}
 
 def extract_article_links(homepage_url, soup):
     """
-    从首页HTML中提取新闻文章链接和标题
-    这个方法需要根据每个网站的具体HTML结构来调整
+    Extract news article links and titles from homepage HTML
+    This method needs to be adjusted based on each website's specific HTML structure
     """
     article_links = []
     base_domain = urlparse(homepage_url).netloc
     
-    # 常见的新闻链接选择器（需要根据实际网站调整）
-    # 尝试多种可能的选择器
+    # Common news link selectors (needs adjustment based on actual website)
+    # Try multiple possible selectors
     selectors = [
-        'article a',           # 文章标签内的链接
-        '.post a',             # 文章类内的链接
-        '.article a',          # article类内的链接
-        'h2 a', 'h3 a',        # 标题内的链接
-        '.entry-title a',      # 标题类内的链接
-        '.news-item a',        # 新闻项内的链接
-        'a[href*="/article/"]',  # 包含/article/的链接
-        'a[href*="/news/"]',      # 包含/news/的链接
-        'a[href*="/story/"]',     # 包含/story/的链接
+        'article a',           # Links within article tags
+        '.post a',             # Links within post class
+        '.article a',          # Links within article class
+        'h2 a', 'h3 a',        # Links within headings
+        '.entry-title a',      # Links within title class
+        '.news-item a',        # Links within news item class
+        'a[href*="/article/"]',  # Links containing /article/
+        'a[href*="/news/"]',      # Links containing /news/
+        'a[href*="/story/"]',     # Links containing /story/
     ]
     
-    found_links = set()  # 用于去重
+    found_links = set()  # For deduplication
     
     for selector in selectors:
         links = soup.select(selector)
@@ -60,18 +60,18 @@ def extract_article_links(homepage_url, soup):
             if not href:
                 continue
             
-            # 转换为绝对URL
+            # Convert to absolute URL
             full_url = urljoin(homepage_url, href)
             parsed = urlparse(full_url)
             
-            # 过滤条件：只保留同域名的链接，排除首页、分类页等
+            # Filter conditions: only keep same-domain links, exclude homepage, category pages, etc.
             if (parsed.netloc == base_domain and 
                 full_url not in found_links and
                 full_url != homepage_url and
                 not any(x in full_url.lower() for x in ['/category/', '/tag/', '/author/', '/page/', '/archive/'])):
                 
                 title = link.get_text(strip=True)
-                if title and len(title) > 10:  # 标题长度过滤
+                if title and len(title) > 10:  # Filter by title length
                     found_links.add(full_url)
                     article_links.append({
                         'title': title,
@@ -79,9 +79,9 @@ def extract_article_links(homepage_url, soup):
                         'source': homepage_url
                     })
     
-    # 如果上面的选择器没找到，尝试更通用的方法
+    # If the above selectors didn't find anything, try a more generic method
     if not article_links:
-        # 查找所有链接，过滤出可能是文章的链接
+        # Find all links and filter out those that might be articles
         all_links = soup.find_all('a', href=True)
         for link in all_links:
             href = link.get('href')
@@ -91,7 +91,7 @@ def extract_article_links(homepage_url, soup):
             if (parsed.netloc == base_domain and 
                 full_url not in found_links and
                 full_url != homepage_url and
-                len(full_url) > len(homepage_url) + 10 and  # URL长度过滤
+                len(full_url) > len(homepage_url) + 10 and  # Filter by URL length
                 not any(x in full_url.lower() for x in ['/category/', '/tag/', '/author/', '/page/', '/archive/', '#'])):
                 
                 title = link.get_text(strip=True)
@@ -103,7 +103,7 @@ def extract_article_links(homepage_url, soup):
                         'source': homepage_url
                     })
     
-    # 去重并限制数量
+    # Deduplicate and limit quantity
     seen = set()
     unique_links = []
     for item in article_links:
@@ -116,40 +116,40 @@ def extract_article_links(homepage_url, soup):
     return unique_links
 
 def serialize_article(article):
-    """将文章对象或字典转换为可序列化的字典"""
+    """Convert article object or dict to serializable dictionary"""
     if article is None:
         return None
     
-    # 如果已经是字典，直接使用
+    # If already a dict, use directly
     if isinstance(article, dict):
         data = article
-    # 如果是对象，转换为字典
+    # If an object, convert to dict
     elif hasattr(article, '__dict__'):
         data = article.__dict__
     else:
-        # 其他类型，直接返回
+        # Other types, return directly
         return article
     
     result = {}
     for key, value in data.items():
         if isinstance(value, datetime):
-            # 将 datetime 转换为字符串
+            # Convert datetime to string
             result[key] = value.isoformat()
         elif isinstance(value, dict):
-            # 递归处理嵌套字典
+            # Recursively process nested dictionaries
             result[key] = serialize_article(value)
         elif hasattr(value, '__dict__'):
-            # 递归处理嵌套对象
+            # Recursively process nested objects
             result[key] = serialize_article(value)
         elif isinstance(value, (list, tuple)):
-            # 处理列表和元组
+            # Process lists and tuples
             result[key] = [serialize_article(item) for item in value]
         else:
-            # 其他类型直接赋值
+            # Other types, assign directly
             result[key] = value
     return result
 
-# 主程序
+# Main program
 print("=" * 60)
 print("开始抓取新闻...")
 print("=" * 60)
@@ -158,24 +158,24 @@ all_articles = []
 total_links_found = 0
 total_articles_extracted = 0
 
-# 第一步：从每个首页提取新闻链接
+# Step 1: Extract news links from each homepage
 for homepage_url in homepage_urls:
     print(f"\n📰 处理首页: {homepage_url}")
     try:
-        # 获取首页HTML
+        # Get homepage HTML
         response = requests.get(homepage_url, headers=headers, timeout=10)
         response.raise_for_status()
         
-        # 解析HTML
+        # Parse HTML
         soup = BeautifulSoup(response.content, 'html.parser')
         
-        # 提取新闻链接
+        # Extract news links
         article_links = extract_article_links(homepage_url, soup)
         total_links_found += len(article_links)
         
         print(f"  ✓ 找到 {len(article_links)} 个新闻链接")
         
-        # 第二步：对每个链接提取文章内容
+        # Step 2: Extract article content for each link
         for i, link_info in enumerate(article_links, 1):
             article_url = link_info['url']
             homepage_title = link_info['title']
@@ -183,14 +183,14 @@ for homepage_url in homepage_urls:
             print(f"  [{i}/{len(article_links)}] 提取: {homepage_title[:50]}...")
             
             try:
-                # 使用 newsplease 提取文章内容
+                # Use newsplease to extract article content
                 article = NewsPlease.from_url(article_url, request_args=request_args)
                 
                 if article and article.title:
-                    # 序列化文章数据
+                    # Serialize article data
                     article_data = serialize_article(article)
                     
-                    # 添加首页信息
+                    # Add homepage information
                     if article_data:
                         article_data['homepage_title'] = homepage_title
                         article_data['homepage_source'] = homepage_url
@@ -202,7 +202,7 @@ for homepage_url in homepage_urls:
                 else:
                     print(f"    ✗ 无法提取内容")
                 
-                # 添加延迟，避免请求过快
+                # Add delay to avoid requests being too fast
                 time.sleep(1)
                 
             except Exception as e:
@@ -213,7 +213,7 @@ for homepage_url in homepage_urls:
         print(f"  ✗ 处理首页失败: {str(e)}")
         continue
 
-# 第三步：保存到JSON文件
+# Step 3: Save to JSON file
 print(f"\n" + "=" * 60)
 print(f"抓取完成！")
 print(f"  找到链接: {total_links_found} 个")

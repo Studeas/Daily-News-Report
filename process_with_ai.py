@@ -5,27 +5,36 @@ from typing import List, Dict, Optional
 import time
 import hashlib
 
-# 导入配置和AI客户端
+# Import configuration and AI client
 from config import config, get_config, is_available, set_provider
 from ai_client import AIClient
 
-# 配置
+# Configuration
 PROMPT_TEMPLATE_FILE = os.getenv('PROMPT_TEMPLATE_FILE', 'prompt_template.txt')
 DATA_DIR = 'data'
 REPORT_DIR = 'report'
 
-# 从环境变量或配置文件获取AI提供商
+# Get AI provider from environment variable or config file
 AI_PROVIDER = os.getenv('AI_PROVIDER', 'gemini').lower()
 
 def load_prompt_template() -> str:
-    """加载prompt模板文件"""
+    """Load prompt template file
+    Priority: environment variable PROMPT_TEMPLATE > file prompt_template.txt > default template
+    """
+    # Priority: read from environment variable (for GitHub Actions, etc.)
+    prompt_from_env = os.getenv('PROMPT_TEMPLATE')
+    if prompt_from_env:
+        print("✓ 从环境变量加载 prompt")
+        return prompt_from_env.strip()
+    
+    # If environment variable doesn't exist, try reading from file
     try:
         if os.path.exists(PROMPT_TEMPLATE_FILE):
             with open(PROMPT_TEMPLATE_FILE, 'r', encoding='utf-8') as f:
-                print("成功加载 prompt")
+                print("✓ 从文件加载 prompt")
                 return f.read().strip()
         else:
-            # 如果文件不存在，返回默认模板
+            # If file doesn't exist, return default template
             print(f"⚠️  Prompt模板文件不存在: {PROMPT_TEMPLATE_FILE}，使用默认模板")
             return """请你将以下新闻翻译为中文。"""
     except Exception as e:
@@ -34,15 +43,15 @@ def load_prompt_template() -> str:
 
 def process_article_with_ai(ai_client: AIClient, article: Dict) -> Optional[Dict]:
     """
-    使用AI处理单篇文章：
-    1. 过滤低质量或不相关文章
-    2. 提取关键信息
-    3. 翻译为中文
+    Process a single article with AI:
+    1. Filter low-quality or irrelevant articles
+    2. Extract key information
+    3. Translate to Chinese
     """
     if not ai_client:
         return None
     
-    # 准备文章内容
+    # Prepare article content
     title = article.get('title', '')
     description = article.get('description', '')
     maintext = article.get('maintext', '')
@@ -50,16 +59,16 @@ def process_article_with_ai(ai_client: AIClient, article: Dict) -> Optional[Dict
     date_publish = article.get('date_publish', '')
     source = article.get('source_domain', '')
     
-    # 如果正文太短，可能不是完整文章
+    # If main text is too short, might not be a complete article
     if not maintext or len(maintext) < 100:
         return None
     
-    # 限制正文长度（避免token限制）
+    # Limit main text length (to avoid token limits)
     maintext_preview = maintext[:3000] if len(maintext) > 3000 else maintext
     if len(maintext) > 3000:
         maintext_preview += "\n\n[文章内容较长，已截断]"
     
-    # 加载并格式化prompt模板
+    # Load and format prompt template
     prompt_template = load_prompt_template()
     prompt = prompt_template.format(
         title=title,
@@ -71,15 +80,15 @@ def process_article_with_ai(ai_client: AIClient, article: Dict) -> Optional[Dict
     )
 
     try:
-        # 使用统一的AI客户端接口
+        # Use unified AI client interface
         response = ai_client.generate_content(prompt)
         
-        # 检查错误
+        # Check for errors
         if 'error' in response:
             error = response['error']
             if '安全过滤器' in error or 'SAFETY' in str(response.get('finish_reason', '')):
                 print(f"  ⚠️  内容被安全过滤器阻止")
-                # 返回基础数据
+                # Return basic data
                 return {
                     "original": {
                         "title": title,
@@ -114,13 +123,13 @@ def process_article_with_ai(ai_client: AIClient, article: Dict) -> Optional[Dict
             print(f"  ⚠️  响应中没有文本内容")
             return None
         
-        # 尝试提取JSON（可能返回markdown格式的代码块）
+        # Try to extract JSON (might be returned in markdown code block format)
         if '```json' in result_text:
             result_text = result_text.split('```json')[1].split('```')[0].strip()
         elif '```' in result_text:
             parts = result_text.split('```')
             for i, part in enumerate(parts):
-                if i % 2 == 1:  # 代码块内容
+                if i % 2 == 1:  # Code block content
                     try:
                         json.loads(part.strip())
                         result_text = part.strip()
@@ -128,19 +137,19 @@ def process_article_with_ai(ai_client: AIClient, article: Dict) -> Optional[Dict
                     except:
                         continue
         
-        # 如果仍然包含JSON对象，尝试提取
+        # If still contains JSON object, try to extract
         if '{' in result_text and '}' in result_text:
             start = result_text.find('{')
             end = result_text.rfind('}') + 1
             result_text = result_text[start:end]
         
-        # 解析JSON
+        # Parse JSON
         ai_result = json.loads(result_text)
         
-        # 合并原始数据和AI处理结果
+        # Merge original data and AI processing results
         is_valid = ai_result.get('is_valid', False)
         
-        # 如果文章无效（被过滤），确保所有字段为空
+        # If article is invalid (filtered), ensure all fields are empty
         if not is_valid:
             processed_article = {
                 "original": {
@@ -155,12 +164,12 @@ def process_article_with_ai(ai_client: AIClient, article: Dict) -> Optional[Dict
                 },
                 "processed": {
                     "is_valid": False,
-                    "category": "",  # 无效文章，分类为空
-                    "key_points": [],  # 无效文章，关键点为空
-                    "title_zh": "",  # 无效文章，不翻译
-                    "description_zh": "",  # 无效文章，不翻译
-                    "summary_zh": "",  # 无效文章，不翻译
-                    "maintext_zh": "",  # 无效文章，不翻译
+                    "category": "",  # Invalid article, category is empty
+                    "key_points": [],  # Invalid article, key points are empty
+                    "title_zh": "",  # Invalid article, no translation
+                    "description_zh": "",  # Invalid article, no translation
+                    "summary_zh": "",  # Invalid article, no translation
+                    "maintext_zh": "",  # Invalid article, no translation
                 },
                 "metadata": {
                     "processed_at": datetime.now().isoformat(),
@@ -169,7 +178,7 @@ def process_article_with_ai(ai_client: AIClient, article: Dict) -> Optional[Dict
                 }
             }
         else:
-            # 有效文章，正常处理
+            # Valid article, process normally
             processed_article = {
                 "original": {
                     "title": title,
@@ -208,12 +217,12 @@ def process_article_with_ai(ai_client: AIClient, article: Dict) -> Optional[Dict
         return None
 
 def find_latest_articles_file() -> Optional[str]:
-    """从data文件夹中查找最新的文章JSON文件"""
+    """Find the latest article JSON file from the data folder"""
     if not os.path.exists(DATA_DIR):
         print(f"❌ 数据文件夹不存在: {DATA_DIR}")
         return None
     
-    # 查找所有JSON文件
+    # Find all JSON files
     json_files = []
     for filename in os.listdir(DATA_DIR):
         if filename.endswith('.json'):
@@ -226,24 +235,24 @@ def find_latest_articles_file() -> Optional[str]:
         print(f"❌ 在 {DATA_DIR} 文件夹中未找到JSON文件")
         return None
     
-    # 按修改时间排序，返回最新的
+    # Sort by modification time, return the latest
     json_files.sort(reverse=True)
     latest_file = json_files[0][1]
     print(f"✓ 找到最新文章文件: {json_files[0][2]}")
     return latest_file
 
 def get_article_id(article: Dict) -> str:
-    """生成文章唯一ID（基于URL）"""
+    """Generate unique article ID (based on URL)"""
     url = article.get('url', '')
     if url:
         return hashlib.md5(url.encode()).hexdigest()
-    # 如果没有URL，使用标题+来源的组合
+    # If no URL, use combination of title and source
     title = article.get('title', '')
     source = article.get('source_domain', '')
     return hashlib.md5(f"{title}_{source}".encode()).hexdigest()
 
 def load_processed_cache(cache_file: str) -> Dict[str, Dict]:
-    """加载已处理的文章缓存"""
+    """Load processed article cache"""
     if os.path.exists(cache_file):
         try:
             with open(cache_file, 'r', encoding='utf-8') as f:
@@ -256,9 +265,9 @@ def load_processed_cache(cache_file: str) -> Dict[str, Dict]:
     return {}
 
 def save_processed_cache(cache_file: str, processed_dict: Dict[str, Dict]):
-    """保存已处理的文章缓存"""
+    """Save processed article cache"""
     try:
-        # 使用临时文件确保原子性写入
+        # Use temporary file to ensure atomic write
         temp_file = cache_file + '.tmp'
         with open(temp_file, 'w', encoding='utf-8') as f:
             json.dump(processed_dict, f, ensure_ascii=False, indent=2)
@@ -267,7 +276,7 @@ def save_processed_cache(cache_file: str, processed_dict: Dict[str, Dict]):
         print(f"  ⚠️  保存缓存失败: {e}")
 
 def save_intermediate_results(processed_articles: List[Dict], report_dir: str):
-    """保存中间结果"""
+    """Save intermediate results"""
     try:
         intermediate_file = os.path.join(report_dir, 'report_intermediate.json')
         report = generate_report(processed_articles)
@@ -277,16 +286,16 @@ def save_intermediate_results(processed_articles: List[Dict], report_dir: str):
         print(f"  ⚠️  保存中间结果失败: {e}")
 
 def load_articles() -> List[Dict]:
-    """加载文章数据（从data文件夹中加载最新的文件）"""
-    # 优先使用环境变量指定的文件
+    """Load article data (load the latest file from the data folder)"""
+    # Priority: use file specified by environment variable
     articles_file = os.getenv('ARTICLES_FILE')
     
     if articles_file:
-        # 如果指定了文件，直接使用
+        # If file is specified, use it directly
         if not os.path.isabs(articles_file):
             articles_file = os.path.join(DATA_DIR, articles_file) if not os.path.exists(articles_file) else articles_file
     else:
-        # 否则查找最新的文件
+        # Otherwise, find the latest file
         articles_file = find_latest_articles_file()
     
     if not articles_file:
@@ -305,18 +314,18 @@ def load_articles() -> List[Dict]:
         return []
 
 def generate_report(processed_articles: List[Dict]) -> Dict:
-    """生成汇总报告"""
+    """Generate summary report"""
     total = len(processed_articles)
     valid_articles = [a for a in processed_articles if a['processed']['is_valid']]
     invalid_count = total - len(valid_articles)
     
-    # 按分类统计
+    # Statistics by category
     category_stats = {}
     for article in valid_articles:
         category = article['processed']['category']
         category_stats[category] = category_stats.get(category, 0) + 1
     
-    # 按来源统计
+    # Statistics by source
     source_stats = {}
     for article in valid_articles:
         source = article['original']['source_domain']
@@ -339,34 +348,34 @@ def generate_report(processed_articles: List[Dict]) -> Dict:
     return report
 
 def generate_markdown_report(report: Dict) -> str:
-    """生成Markdown格式的报告"""
+    """Generate Markdown format report"""
     md = []
     
-    # 标题
+    # Title
     md.append("# 尼日利亚新闻汇总报告\n")
     md.append(f"**生成时间**: {report['summary']['processing_date']}\n")
     
-    # 摘要
+    # Summary
     md.append("## 📊 数据摘要\n")
     md.append(f"- **总文章数**: {report['summary']['total_articles']}")
     md.append(f"- **有效文章**: {report['summary']['valid_articles']}")
     md.append(f"- **无效文章**: {report['summary']['invalid_articles']}\n")
     
-    # 分类统计
+    # Category statistics
     md.append("## 📁 分类统计\n")
     for category, count in sorted(report['statistics']['by_category'].items(), 
                                   key=lambda x: x[1], reverse=True):
         md.append(f"- **{category}**: {count} 篇")
     md.append("")
     
-    # 来源统计
+    # Source statistics
     md.append("## 📰 来源统计\n")
     for source, count in sorted(report['statistics']['by_source'].items(), 
                                key=lambda x: x[1], reverse=True):
         md.append(f"- **{source}**: {count} 篇")
     md.append("")
     
-    # 文章列表
+    # Article list
     md.append("## 📄 文章详情\n")
     md.append("---\n")
     
@@ -403,10 +412,10 @@ def generate_markdown_report(report: Dict) -> str:
     return "\n".join(md)
 
 def generate_html_report(report: Dict) -> str:
-    """生成HTML格式的报告"""
+    """Generate HTML format report"""
     html = []
     
-    # HTML头部
+    # HTML header
     processing_date = report['summary']['processing_date']
     html.append(f"""<!DOCTYPE html>
 <html lang="zh-CN">
@@ -550,7 +559,7 @@ def generate_html_report(report: Dict) -> str:
         </div>
     """)
     
-    # 数据摘要
+    # Data summary
     total_articles = report['summary']['total_articles']
     valid_articles = report['summary']['valid_articles']
     invalid_articles = report['summary']['invalid_articles']
@@ -572,7 +581,7 @@ def generate_html_report(report: Dict) -> str:
         </div>
     """)
     
-    # 分类统计
+    # Category statistics
     html.append("<h2>📁 分类统计</h2>")
     html.append('<div class="stats">')
     for category, count in sorted(report['statistics']['by_category'].items(), 
@@ -585,7 +594,7 @@ def generate_html_report(report: Dict) -> str:
         """)
     html.append("</div>")
     
-    # 来源统计
+    # Source statistics
     html.append("<h2>📰 来源统计</h2>")
     html.append('<div class="stats">')
     for source, count in sorted(report['statistics']['by_source'].items(), 
@@ -598,7 +607,7 @@ def generate_html_report(report: Dict) -> str:
         """)
     html.append("</div>")
     
-    # 文章列表
+    # Article list
     html.append("<h2>📄 文章详情</h2>")
     
     for i, article in enumerate(report['articles'], 1):
@@ -640,7 +649,7 @@ def generate_html_report(report: Dict) -> str:
         
         html.append('</div>')
     
-    # HTML尾部
+    # HTML footer
     html.append("""
     </div>
 </body>
@@ -650,18 +659,18 @@ def generate_html_report(report: Dict) -> str:
     return "\n".join(html)
 
 def main():
-    """主函数"""
+    """Main function"""
     print("=" * 60)
     print("AI新闻处理与报告生成")
     print("=" * 60)
     
-    # 显示配置状态
+    # Display configuration status
     config.print_status()
     
-    # 获取AI提供商（使用局部变量避免作用域问题）
+    # Get AI provider (use local variable to avoid scope issues)
     current_provider = AI_PROVIDER
     
-    # 初始化AI客户端
+    # Initialize AI client
     if not is_available(current_provider):
         print(f"\n⚠️  {current_provider} 不可用，尝试查找可用的提供商...")
         available = config.get_available_providers()
@@ -687,7 +696,7 @@ def main():
         print("   将使用基础处理模式（无AI功能）")
         ai_client = None
     
-    # 加载文章
+    # Load articles
     print(f"\n📂 加载文章数据...")
     articles = load_articles()
     
@@ -695,29 +704,29 @@ def main():
         print("❌ 没有可处理的文章")
         return
     
-    # 创建报告目录和缓存文件路径
+    # Create report directory and cache file path
     today = datetime.now().strftime("%Y%m%d")
     report_date_dir = os.path.join(REPORT_DIR, today)
     os.makedirs(report_date_dir, exist_ok=True)
     cache_file = os.path.join(report_date_dir, 'processed_cache.json')
     
-    # 加载已处理的文章缓存（断点续传）
+    # Load processed article cache (resume from breakpoint)
     print(f"\n📋 检查已处理缓存...")
     processed_cache = load_processed_cache(cache_file)
     if processed_cache:
         print(f"  ✓ 发现 {len(processed_cache)} 篇已处理文章，将跳过这些文章")
     
-    # 处理文章
+    # Process articles
     print(f"\n🤖 使用AI处理文章...")
     processed_articles = []
-    save_interval = 5  # 每处理5篇文章保存一次中间结果
+    save_interval = 5  # Save intermediate results every 5 articles
     skipped_count = 0
     
     try:
         for i, article in enumerate(articles, 1):
             article_id = get_article_id(article)
             
-            # 检查是否已处理（断点续传）
+            # Check if already processed (resume from breakpoint)
             if article_id in processed_cache:
                 print(f"\n[{i}/{len(articles)}] ⏭️  跳过（已处理）: {article.get('title', '无标题')[:50]}...")
                 processed_articles.append(processed_cache[article_id])
@@ -730,11 +739,11 @@ def main():
                 processed = process_article_with_ai(ai_client, article)
                 if processed:
                     processed_articles.append(processed)
-                    # 立即保存到缓存（断点续传）
+                    # Immediately save to cache (resume from breakpoint)
                     processed_cache[article_id] = processed
                     save_processed_cache(cache_file, processed_cache)
                     
-                    # 每处理N篇保存一次中间结果
+                    # Save intermediate results every N articles
                     new_processed_count = len(processed_articles) - skipped_count
                     if new_processed_count > 0 and new_processed_count % save_interval == 0:
                         print(f"  💾 保存中间结果（已处理 {len(processed_articles)} 篇，其中新处理 {new_processed_count} 篇）...")
@@ -746,17 +755,17 @@ def main():
                         print(f"  ✗ 无效文章（已过滤）")
                 else:
                     print(f"  ⚠️  处理失败")
-                    # 检查是否是余额不足错误，如果是，提示用户
-                    if i == 1:  # 只在第一篇文章失败时提示
+                    # Check if it's an insufficient balance error, if so, prompt user
+                    if i == 1:  # Only prompt on first article failure
                         print(f"\n💡 提示: 如果看到'余额不足'错误，可以：")
                         print(f"   1. 为当前AI提供商充值")
                         print(f"   2. 切换到其他可用提供商: export AI_PROVIDER='gemini' 或 'tongyi'")
                         print(f"   3. 查看可用提供商: python -c 'from config import config; config.print_status()'")
                 
-                # 添加延迟，避免API限流
+                # Add delay to avoid API rate limiting
                 time.sleep(1)
             else:
-                # 如果没有AI模型，使用基础处理
+                # If no AI model, use basic processing
                 processed = {
                     "original": {
                         "title": article.get('title', ''),
@@ -792,12 +801,12 @@ def main():
         print(f"\n\n❌ 处理过程出错: {e}")
         print("💾 尝试保存已处理的结果...")
     finally:
-        # 无论是否异常，都保存已处理的结果
+        # Save processed results regardless of exceptions
         if processed_articles:
             print(f"\n💾 保存最终结果（共 {len(processed_articles)} 篇，其中跳过 {skipped_count} 篇）...")
             save_intermediate_results(processed_articles, report_date_dir)
     
-    # 生成最终报告（使用已处理的结果）
+    # Generate final report (using processed results)
     if not processed_articles:
         print("\n⚠️  没有已处理的文章，无法生成报告")
         return
@@ -805,27 +814,27 @@ def main():
     print(f"\n📊 生成最终报告...")
     report = generate_report(processed_articles)
     
-    # 保存JSON报告
+    # Save JSON report
     report_json_file = os.path.join(report_date_dir, 'report.json')
     with open(report_json_file, 'w', encoding='utf-8') as f:
         json.dump(report, f, ensure_ascii=False, indent=2)
     print(f"✓ JSON报告已保存: {report_json_file}")
     
-    # 生成并保存Markdown报告
+    # Generate and save Markdown report
     md_report = generate_markdown_report(report)
     report_md_file = os.path.join(report_date_dir, 'report.md')
     with open(report_md_file, 'w', encoding='utf-8') as f:
         f.write(md_report)
     print(f"✓ Markdown报告已保存: {report_md_file}")
     
-    # 生成并保存HTML报告
+    # Generate and save HTML report
     html_report = generate_html_report(report)
     report_html_file = os.path.join(report_date_dir, 'report.html')
     with open(report_html_file, 'w', encoding='utf-8') as f:
         f.write(html_report)
     print(f"✓ HTML报告已保存: {report_html_file}")
     
-    # 清理中间结果文件（保留最终报告）
+    # Clean up intermediate result files (keep final reports)
     intermediate_file = os.path.join(report_date_dir, 'report_intermediate.json')
     if os.path.exists(intermediate_file):
         try:
@@ -834,7 +843,7 @@ def main():
         except:
             pass
     
-    # 打印摘要
+    # Print summary
     print(f"\n" + "=" * 60)
     print("处理完成！")
     print("=" * 60)

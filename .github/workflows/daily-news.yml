@@ -46,6 +46,8 @@ jobs:
         TENCENT_SECRET_KEY: ${{ secrets.TENCENT_SECRET_KEY }}
         ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}
         AI_PROVIDER: ${{ secrets.AI_PROVIDER || 'zhipu' }}
+        # Prompt 模板（从 Secrets 读取，隐藏 prompt 内容）
+        PROMPT_TEMPLATE: ${{ secrets.PROMPT_TEMPLATE }}
         # 邮件配置
         SMTP_HOST: ${{ secrets.SMTP_HOST }}
         SMTP_PORT: ${{ secrets.SMTP_PORT }}

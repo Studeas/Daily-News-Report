@@ -1,6 +1,6 @@
 """
-AI API 客户端封装
-提供统一的接口调用不同的AI API
+AI API client wrapper
+Provides unified interface to call different AI APIs
 """
 
 from typing import Dict, Optional, Any
@@ -8,19 +8,19 @@ import json
 from config import get_config, is_available
 
 class AIClient:
-    """统一的AI客户端接口"""
+    """Unified AI client interface"""
     
     def __init__(self, provider: Optional[str] = None):
-        """初始化AI客户端"""
+        """Initialize AI client"""
         self.config = get_config(provider)
         self.provider = self.config['provider']
         self.model_name = self.config.get('default_model')
         
-        # 初始化对应的客户端
+        # Initialize corresponding client
         self.client = self._init_client()
     
     def _init_client(self):
-        """初始化具体的AI客户端"""
+        """Initialize specific AI client"""
         if self.provider == 'gemini':
             return self._init_gemini()
         elif self.provider == 'openai':
@@ -41,12 +41,12 @@ class AIClient:
             raise ValueError(f"不支持的提供商: {self.provider}")
     
     def _init_gemini(self):
-        """初始化Gemini客户端"""
+        """Initialize Gemini client"""
         try:
             import google.generativeai as genai
             genai.configure(api_key=self.config['api_key'])
             
-            # 尝试不同的模型
+            # Try different models
             for model_name in self.config['models']:
                 try:
                     model = genai.GenerativeModel(model_name)
@@ -94,9 +94,9 @@ class AIClient:
             raise ImportError("请安装 requests: pip install requests")
     
     def _init_tongyi(self):
-        """初始化通义千问客户端（优先使用DashScope SDK，fallback到OpenAI兼容接口）"""
+        """Initialize Tongyi client (prefer DashScope SDK, fallback to OpenAI compatible interface)"""
         try:
-            # 优先尝试使用DashScope SDK
+            # Priority: try using DashScope SDK
             try:
                 import dashscope
                 dashscope.api_key = self.config['api_key']
@@ -104,7 +104,7 @@ class AIClient:
                 print(f"✓ 使用 通义千问 模型: {self.model_name} (DashScope SDK)")
                 return {'type': 'dashscope', 'api_key': self.config['api_key']}
             except ImportError:
-                # 如果没有DashScope SDK，使用OpenAI兼容接口
+                # If DashScope SDK is not available, use OpenAI compatible interface
                 import openai
                 client = openai.OpenAI(
                     api_key=self.config['api_key'],
@@ -117,7 +117,7 @@ class AIClient:
             raise ImportError("请安装 dashscope 或 openai: pip install dashscope 或 pip install openai")
     
     def _init_deepseek(self):
-        """初始化DeepSeek客户端（使用OpenAI兼容接口）"""
+        """Initialize DeepSeek client (using OpenAI compatible interface)"""
         try:
             import openai
             client = openai.OpenAI(
@@ -169,7 +169,7 @@ class AIClient:
             raise ImportError("请安装 zai: pip install zai")
     
     def generate_content(self, prompt: str, **kwargs) -> Dict[str, Any]:
-        """生成内容（统一接口）"""
+        """Generate content (unified interface)"""
         if self.provider == 'gemini':
             return self._generate_gemini(prompt, **kwargs)
         elif self.provider == 'openai':
@@ -188,7 +188,7 @@ class AIClient:
             return self._generate_zhipu(prompt, **kwargs)
     
     def _generate_gemini(self, prompt: str, **kwargs) -> Dict[str, Any]:
-        """Gemini生成内容"""
+        """Generate content with Gemini"""
         try:
             response = self.client.generate_content(
                 prompt,
@@ -198,14 +198,14 @@ class AIClient:
                 }
             )
             
-            # 检查响应
+            # Check response
             if not response.candidates:
                 return {'error': '响应中没有候选项', 'text': None}
             
             candidate = response.candidates[0]
             finish_reason = candidate.finish_reason
             
-            # 处理安全过滤器
+            # Handle safety filter
             if finish_reason == 1 or str(finish_reason).upper() == "SAFETY":
                 return {
                     'error': '内容被安全过滤器阻止',
@@ -214,7 +214,7 @@ class AIClient:
                     'safety_ratings': getattr(candidate, 'safety_ratings', [])
                 }
             
-            # 提取文本
+            # Extract text
             try:
                 text = response.text.strip()
             except:
@@ -297,11 +297,11 @@ class AIClient:
             return {'error': str(e), 'text': None}
     
     def _generate_tongyi(self, prompt: str, **kwargs) -> Dict[str, Any]:
-        """通义千问生成内容"""
+        """Generate content with Tongyi"""
         try:
-            # 检查客户端类型
+            # Check client type
             if isinstance(self.client, dict) and self.client.get('type') == 'dashscope':
-                # 使用DashScope SDK
+                # Use DashScope SDK
                 import dashscope
                 from dashscope import Generation
                 
@@ -329,7 +329,7 @@ class AIClient:
                         error_msg += "\n3. 访问 https://bailian.console.aliyun.com/ 获取正确的API密钥"
                     return {'error': error_msg, 'text': None}
             else:
-                # 使用OpenAI兼容接口
+                # Use OpenAI compatible interface
                 client = self.client.get('client') if isinstance(self.client, dict) else self.client
                 response = client.chat.completions.create(
                     model=self.model_name,
@@ -348,7 +348,7 @@ class AIClient:
             
         except Exception as e:
             error_msg = str(e)
-            # 改进401错误的提示
+            # Improve 401 error message
             if '401' in error_msg or 'invalid_api_key' in error_msg.lower() or 'Incorrect API key' in error_msg:
                 error_msg += "\n\n💡 通义千问API密钥获取指南："
                 error_msg += "\n1. 访问 https://bailian.console.aliyun.com/"
@@ -377,7 +377,7 @@ class AIClient:
             
         except Exception as e:
             error_msg = str(e)
-            # 改进错误提示
+            # Improve error message
             if '402' in error_msg or 'Insufficient Balance' in error_msg or '余额不足' in error_msg:
                 error_msg = f"DeepSeek账户余额不足 (402)\n\n💡 解决方案："
                 error_msg += "\n1. 访问 https://platform.deepseek.com/ 登录账户"
@@ -425,9 +425,9 @@ class AIClient:
             return {'error': str(e), 'text': None}
     
     def _generate_zhipu(self, prompt: str, **kwargs) -> Dict[str, Any]:
-        """智谱AI生成内容"""
+        """Generate content with ZhipuAI"""
         try:
-            # 构建请求参数
+            # Build request parameters
             request_params = {
                 'model': self.model_name,
                 'messages': [
@@ -438,7 +438,7 @@ class AIClient:
                 'temperature': kwargs.get('temperature', self.config.get('temperature', 1.0)),
             }
             
-            # 如果启用了深度思考模式
+            # If deep thinking mode is enabled
             if self.config.get('thinking_enabled', False) or kwargs.get('thinking_enabled', False):
                 request_params['thinking'] = {
                     "type": "enabled"
@@ -446,10 +446,10 @@ class AIClient:
             
             response = self.client.chat.completions.create(**request_params)
             
-            # 获取回复内容
+            # Get reply content
             message = response.choices[0].message
             
-            # 智谱AI的响应格式可能不同，需要适配
+            # ZhipuAI response format may differ, need to adapt
             if hasattr(message, 'content'):
                 text = message.content.strip()
             elif isinstance(message, dict):
@@ -463,7 +463,7 @@ class AIClient:
             
         except Exception as e:
             error_msg = str(e)
-            # 改进错误提示
+            # Improve error message
             if '401' in error_msg or 'invalid_api_key' in error_msg.lower() or 'Incorrect API key' in error_msg:
                 error_msg += "\n\n💡 智谱AI API密钥获取指南："
                 error_msg += "\n1. 访问 https://open.bigmodel.cn/"

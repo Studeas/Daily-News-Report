@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-发送报告邮件
-在 run.py 执行完成后自动发送邮件
+Send report email
+Automatically send email after run.py execution completes
 """
 
 import os
@@ -14,8 +14,8 @@ from datetime import datetime
 import glob
 
 def send_report_email():
-    """发送报告邮件"""
-    # 从环境变量读取配置
+    """Send report email"""
+    # Read configuration from environment variables
     smtp_host = os.getenv('SMTP_HOST', 'smtp.gmail.com')
     smtp_port = int(os.getenv('SMTP_PORT', '587'))
     smtp_user = os.getenv('SMTP_USER')
@@ -27,12 +27,12 @@ def send_report_email():
         print("   需要设置环境变量: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, EMAIL_TO")
         return False
     
-    # 支持多个邮箱（逗号分隔）
-    # 清理邮箱地址（去除空格）
+    # Support multiple email addresses (comma-separated)
+    # Clean email addresses (remove spaces)
     email_list = [email.strip() for email in email_to.split(',')]
-    email_to_clean = ', '.join(email_list)  # 用于显示
+    email_to_clean = ', '.join(email_list)  # For display
     
-    # 查找最新的报告
+    # Find latest report
     today = datetime.now().strftime("%Y%m%d")
     report_dir = f'report/{today}'
     
@@ -40,7 +40,7 @@ def send_report_email():
         print(f"⚠️  报告目录不存在: {report_dir}")
         return False
     
-    # 检查报告文件
+    # Check report files
     report_files = {
         'html': f'{report_dir}/report.html',
         'json': f'{report_dir}/report.json',
@@ -56,13 +56,13 @@ def send_report_email():
     print(f"\n📧 准备发送邮件到: {email_to_clean}")
     print(f"   收件人数量: {len(email_list)} 个邮箱")
     
-    # 创建邮件
+    # Create email
     msg = MIMEMultipart()
     msg['From'] = smtp_user
-    msg['To'] = email_to_clean  # 多个邮箱用逗号分隔
+    msg['To'] = email_to_clean  # Multiple emails separated by comma
     msg['Subject'] = f'每日新闻报告 - {datetime.now().strftime("%Y-%m-%d")}'
     
-    # 邮件正文
+    # Email body
     body = f"""
     今日新闻处理完成！
     
@@ -73,7 +73,7 @@ def send_report_email():
     for name, filepath in existing_files.items():
         body += f"  - report.{name}\n"
     
-    # 添加日志文件信息
+    # Add log file information
     log_files = glob.glob('log/run_*.log')
     if log_files:
         latest_log = max(log_files, key=os.path.getctime)
@@ -83,7 +83,7 @@ def send_report_email():
     
     msg.attach(MIMEText(body, 'plain', 'utf-8'))
     
-    # 添加附件
+    # Add attachments
     attachments_added = 0
     for name, filepath in existing_files.items():
         try:
@@ -101,7 +101,7 @@ def send_report_email():
         except Exception as e:
             print(f"  ⚠️  添加附件失败 {filepath}: {e}")
     
-    # 添加最新的日志文件
+    # Add latest log file
     if log_files:
         latest_log = max(log_files, key=os.path.getctime)
         try:
@@ -123,7 +123,7 @@ def send_report_email():
         print("  ⚠️  没有可附加的文件")
         return False
     
-    # 发送邮件
+    # Send email
     try:
         print(f"  🔄 连接到邮件服务器: {smtp_host}:{smtp_port}")
         server = smtplib.SMTP(smtp_host, smtp_port)

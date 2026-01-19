@@ -1,15 +1,15 @@
 """
-AI API 配置文件
-支持多种AI API：Gemini、OpenAI、Claude等
+AI API configuration file
+Supports multiple AI APIs: Gemini, OpenAI, Claude, etc.
 """
 
 import os
 from typing import Dict, Optional, Any
 
 class AIConfig:
-    """AI API配置类"""
+    """AI API configuration class"""
     
-    # 可用的AI提供商
+    # Available AI providers
     PROVIDERS = {
         'gemini': 'Google Gemini',
         'openai': 'OpenAI GPT',
@@ -22,11 +22,11 @@ class AIConfig:
     }
     
     def __init__(self):
-        """初始化配置"""
-        # 默认提供商（可以通过环境变量或配置文件修改）
+        """Initialize configuration"""
+        # Default provider (can be modified via environment variable or config file)
         self.default_provider = os.getenv('AI_PROVIDER', 'gemini').lower()
         
-        # 各API的配置
+        # Configuration for each API
         self.configs = {
             'gemini': {
                 'enabled': True,
@@ -64,7 +64,7 @@ class AIConfig:
             },
             'ollama': {
                 'enabled': True,
-                'api_key': '',  # Ollama不需要API密钥
+                'api_key': '',  # Ollama doesn't require API key
                 'base_url': os.getenv('OLLAMA_BASE_URL', 'http://localhost:11434'),
                 'models': [
                     'llama2',
@@ -130,12 +130,12 @@ class AIConfig:
                 'default_model': 'glm-4.7',
                 'temperature': 1.0,
                 'max_tokens': 65536,
-                'thinking_enabled': False,  # 是否启用深度思考模式
+                'thinking_enabled': False,  # Whether to enable deep thinking mode
             },
         }
     
     def get_provider_config(self, provider: Optional[str] = None) -> Dict[str, Any]:
-        """获取指定提供商的配置"""
+        """Get configuration for specified provider"""
         provider = (provider or self.default_provider).lower()
         
         if provider not in self.configs:
@@ -148,23 +148,23 @@ class AIConfig:
         return config
     
     def is_provider_available(self, provider: Optional[str] = None) -> bool:
-        """检查提供商是否可用（有API密钥等）"""
+        """Check if provider is available (has API key, etc.)"""
         provider = (provider or self.default_provider).lower()
         config = self.get_provider_config(provider)
         
-        # Ollama不需要API密钥
+        # Ollama doesn't require API key
         if provider == 'ollama':
             return config['enabled']
         
-        # 腾讯混元需要secret_id和secret_key
+        # Tencent Hunyuan requires secret_id and secret_key
         if provider == 'hunyuan':
             return config['enabled'] and bool(config.get('api_key')) and bool(config.get('secret_key'))
         
-        # 其他提供商需要API密钥
+        # Other providers require API key
         return config['enabled'] and bool(config.get('api_key'))
     
     def get_available_providers(self) -> list:
-        """获取所有可用的提供商列表"""
+        """Get list of all available providers"""
         available = []
         for provider in self.PROVIDERS.keys():
             if self.is_provider_available(provider):
@@ -172,13 +172,13 @@ class AIConfig:
         return available
     
     def set_default_provider(self, provider: str):
-        """设置默认提供商"""
+        """Set default provider"""
         if provider.lower() not in self.PROVIDERS:
             raise ValueError(f"不支持的AI提供商: {provider}")
         self.default_provider = provider.lower()
     
     def update_config(self, provider: str, **kwargs):
-        """更新指定提供商的配置"""
+        """Update configuration for specified provider"""
         provider = provider.lower()
         if provider not in self.configs:
             raise ValueError(f"不支持的AI提供商: {provider}")
@@ -186,7 +186,7 @@ class AIConfig:
         self.configs[provider].update(kwargs)
     
     def print_status(self):
-        """打印所有提供商的配置状态"""
+        """Print configuration status for all providers"""
         print("=" * 60)
         print("AI API 配置状态")
         print("=" * 60)
@@ -210,18 +210,18 @@ class AIConfig:
             print()
 
 
-# 全局配置实例
+# Global configuration instance
 config = AIConfig()
 
-# 便捷函数
+# Convenience functions
 def get_config(provider: Optional[str] = None) -> Dict[str, Any]:
-    """获取配置（便捷函数）"""
+    """Get configuration (convenience function)"""
     return config.get_provider_config(provider)
 
 def is_available(provider: Optional[str] = None) -> bool:
-    """检查是否可用（便捷函数）"""
+    """Check if available (convenience function)"""
     return config.is_provider_available(provider)
 
 def set_provider(provider: str):
-    """设置提供商（便捷函数）"""
+    """Set provider (convenience function)"""
     config.set_default_provider(provider)

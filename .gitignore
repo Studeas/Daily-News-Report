@@ -60,4 +60,9 @@ report/*/report_intermediate.json
 .DS_Store
 Thumbs.db
 
+# Prompt template (隐藏，通过环境变量或本地文件使用)
+prompt_template.txt
+
 CONFIG_USAGE.md
+
+crawl_guardian.py

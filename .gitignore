@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+ENV/
+env/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment variables
+.env
+.env.local
+
+# Logs
+*.log
+log/*.log
+!log/.gitkeep
+
+# Data files (保留目录结构，但不提交数据文件)
+data/*.json
+!data/.gitkeep
+
+# Reports (可选，如果不想提交报告到 Git)
+# 默认不推送报告，因为 GitHub Actions 会生成新的
+# 如果想保留历史报告，可以注释掉下面这行
+report/
+!report/.gitkeep
+
+# OS
+.DS_Store
+Thumbs.db

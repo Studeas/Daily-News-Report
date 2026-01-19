@@ -3,6 +3,7 @@ import os
 from datetime import datetime
 from typing import List, Dict, Optional
 import time
+import hashlib
 
 # 导入配置和AI客户端
 from config import config, get_config, is_available, set_provider
@@ -230,6 +231,50 @@ def find_latest_articles_file() -> Optional[str]:
     latest_file = json_files[0][1]
     print(f"✓ 找到最新文章文件: {json_files[0][2]}")
     return latest_file
+
+def get_article_id(article: Dict) -> str:
+    """生成文章唯一ID（基于URL）"""
+    url = article.get('url', '')
+    if url:
+        return hashlib.md5(url.encode()).hexdigest()
+    # 如果没有URL，使用标题+来源的组合
+    title = article.get('title', '')
+    source = article.get('source_domain', '')
+    return hashlib.md5(f"{title}_{source}".encode()).hexdigest()
+
+def load_processed_cache(cache_file: str) -> Dict[str, Dict]:
+    """加载已处理的文章缓存"""
+    if os.path.exists(cache_file):
+        try:
+            with open(cache_file, 'r', encoding='utf-8') as f:
+                cache_data = json.load(f)
+                print(f"  ✓ 加载缓存: {len(cache_data)} 篇已处理文章")
+                return cache_data
+        except Exception as e:
+            print(f"  ⚠️  加载缓存失败: {e}")
+            return {}
+    return {}
+
+def save_processed_cache(cache_file: str, processed_dict: Dict[str, Dict]):
+    """保存已处理的文章缓存"""
+    try:
+        # 使用临时文件确保原子性写入
+        temp_file = cache_file + '.tmp'
+        with open(temp_file, 'w', encoding='utf-8') as f:
+            json.dump(processed_dict, f, ensure_ascii=False, indent=2)
+        os.replace(temp_file, cache_file)
+    except Exception as e:
+        print(f"  ⚠️  保存缓存失败: {e}")
+
+def save_intermediate_results(processed_articles: List[Dict], report_dir: str):
+    """保存中间结果"""
+    try:
+        intermediate_file = os.path.join(report_dir, 'report_intermediate.json')
+        report = generate_report(processed_articles)
+        with open(intermediate_file, 'w', encoding='utf-8') as f:
+            json.dump(report, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"  ⚠️  保存中间结果失败: {e}")
 
 def load_articles() -> List[Dict]:
     """加载文章数据（从data文件夹中加载最新的文件）"""
@@ -650,69 +695,115 @@ def main():
         print("❌ 没有可处理的文章")
         return
     
-    # 处理文章
-    print(f"\n🤖 使用AI处理文章...")
-    processed_articles = []
-    
-    for i, article in enumerate(articles, 1):
-        print(f"\n[{i}/{len(articles)}] 处理: {article.get('title', '无标题')[:50]}...")
-        
-        if ai_client:
-            processed = process_article_with_ai(ai_client, article)
-            if processed:
-                processed_articles.append(processed)
-                if processed['processed']['is_valid']:
-                    print(f"  ✓ 有效文章 - 分类: {processed['processed']['category']}")
-                else:
-                    print(f"  ✗ 无效文章（已过滤）")
-            else:
-                print(f"  ⚠️  处理失败")
-                # 检查是否是余额不足错误，如果是，提示用户
-                if i == 1:  # 只在第一篇文章失败时提示
-                    print(f"\n💡 提示: 如果看到'余额不足'错误，可以：")
-                    print(f"   1. 为当前AI提供商充值")
-                    print(f"   2. 切换到其他可用提供商: export AI_PROVIDER='gemini' 或 'tongyi'")
-                    print(f"   3. 查看可用提供商: python -c 'from config import config; config.print_status()'")
-            
-            # 添加延迟，避免API限流
-            time.sleep(1)
-        else:
-            # 如果没有AI模型，使用基础处理
-            processed = {
-                "original": {
-                    "title": article.get('title', ''),
-                    "description": article.get('description', ''),
-                    "maintext": article.get('maintext', ''),
-                    "authors": article.get('authors', []),
-                    "date_publish": article.get('date_publish', ''),
-                    "source_domain": article.get('source_domain', ''),
-                    "url": article.get('url', ''),
-                    "homepage_source": article.get('homepage_source', ''),
-                },
-                "processed": {
-                    "is_valid": bool(article.get('maintext')),
-                    "category": "其他",
-                    "key_points": [],
-                    "title_zh": "",
-                    "description_zh": "",
-                    "summary_zh": "",
-                    "maintext_zh": "",
-                },
-                "metadata": {
-                    "processed_at": datetime.now().isoformat(),
-                    "source": "basic"
-                }
-            }
-            processed_articles.append(processed)
-    
-    # 生成报告
-    print(f"\n📊 生成报告...")
-    report = generate_report(processed_articles)
-    
-    # 创建报告目录（以今天日期命名）
+    # 创建报告目录和缓存文件路径
     today = datetime.now().strftime("%Y%m%d")
     report_date_dir = os.path.join(REPORT_DIR, today)
     os.makedirs(report_date_dir, exist_ok=True)
+    cache_file = os.path.join(report_date_dir, 'processed_cache.json')
+    
+    # 加载已处理的文章缓存（断点续传）
+    print(f"\n📋 检查已处理缓存...")
+    processed_cache = load_processed_cache(cache_file)
+    if processed_cache:
+        print(f"  ✓ 发现 {len(processed_cache)} 篇已处理文章，将跳过这些文章")
+    
+    # 处理文章
+    print(f"\n🤖 使用AI处理文章...")
+    processed_articles = []
+    save_interval = 5  # 每处理5篇文章保存一次中间结果
+    skipped_count = 0
+    
+    try:
+        for i, article in enumerate(articles, 1):
+            article_id = get_article_id(article)
+            
+            # 检查是否已处理（断点续传）
+            if article_id in processed_cache:
+                print(f"\n[{i}/{len(articles)}] ⏭️  跳过（已处理）: {article.get('title', '无标题')[:50]}...")
+                processed_articles.append(processed_cache[article_id])
+                skipped_count += 1
+                continue
+            
+            print(f"\n[{i}/{len(articles)}] 处理: {article.get('title', '无标题')[:50]}...")
+            
+            if ai_client:
+                processed = process_article_with_ai(ai_client, article)
+                if processed:
+                    processed_articles.append(processed)
+                    # 立即保存到缓存（断点续传）
+                    processed_cache[article_id] = processed
+                    save_processed_cache(cache_file, processed_cache)
+                    
+                    # 每处理N篇保存一次中间结果
+                    new_processed_count = len(processed_articles) - skipped_count
+                    if new_processed_count > 0 and new_processed_count % save_interval == 0:
+                        print(f"  💾 保存中间结果（已处理 {len(processed_articles)} 篇，其中新处理 {new_processed_count} 篇）...")
+                        save_intermediate_results(processed_articles, report_date_dir)
+                    
+                    if processed['processed']['is_valid']:
+                        print(f"  ✓ 有效文章 - 分类: {processed['processed']['category']}")
+                    else:
+                        print(f"  ✗ 无效文章（已过滤）")
+                else:
+                    print(f"  ⚠️  处理失败")
+                    # 检查是否是余额不足错误，如果是，提示用户
+                    if i == 1:  # 只在第一篇文章失败时提示
+                        print(f"\n💡 提示: 如果看到'余额不足'错误，可以：")
+                        print(f"   1. 为当前AI提供商充值")
+                        print(f"   2. 切换到其他可用提供商: export AI_PROVIDER='gemini' 或 'tongyi'")
+                        print(f"   3. 查看可用提供商: python -c 'from config import config; config.print_status()'")
+                
+                # 添加延迟，避免API限流
+                time.sleep(1)
+            else:
+                # 如果没有AI模型，使用基础处理
+                processed = {
+                    "original": {
+                        "title": article.get('title', ''),
+                        "description": article.get('description', ''),
+                        "maintext": article.get('maintext', ''),
+                        "authors": article.get('authors', []),
+                        "date_publish": article.get('date_publish', ''),
+                        "source_domain": article.get('source_domain', ''),
+                        "url": article.get('url', ''),
+                        "homepage_source": article.get('homepage_source', ''),
+                    },
+                    "processed": {
+                        "is_valid": bool(article.get('maintext')),
+                        "category": "其他",
+                        "key_points": [],
+                        "title_zh": "",
+                        "description_zh": "",
+                        "summary_zh": "",
+                        "maintext_zh": "",
+                    },
+                    "metadata": {
+                        "processed_at": datetime.now().isoformat(),
+                        "source": "basic"
+                    }
+                }
+                processed_articles.append(processed)
+                processed_cache[article_id] = processed
+                save_processed_cache(cache_file, processed_cache)
+    
+    except KeyboardInterrupt:
+        print("\n\n⚠️  用户中断，保存已处理的结果...")
+    except Exception as e:
+        print(f"\n\n❌ 处理过程出错: {e}")
+        print("💾 尝试保存已处理的结果...")
+    finally:
+        # 无论是否异常，都保存已处理的结果
+        if processed_articles:
+            print(f"\n💾 保存最终结果（共 {len(processed_articles)} 篇，其中跳过 {skipped_count} 篇）...")
+            save_intermediate_results(processed_articles, report_date_dir)
+    
+    # 生成最终报告（使用已处理的结果）
+    if not processed_articles:
+        print("\n⚠️  没有已处理的文章，无法生成报告")
+        return
+    
+    print(f"\n📊 生成最终报告...")
+    report = generate_report(processed_articles)
     
     # 保存JSON报告
     report_json_file = os.path.join(report_date_dir, 'report.json')
@@ -733,6 +824,15 @@ def main():
     with open(report_html_file, 'w', encoding='utf-8') as f:
         f.write(html_report)
     print(f"✓ HTML报告已保存: {report_html_file}")
+    
+    # 清理中间结果文件（保留最终报告）
+    intermediate_file = os.path.join(report_date_dir, 'report_intermediate.json')
+    if os.path.exists(intermediate_file):
+        try:
+            os.remove(intermediate_file)
+            print(f"✓ 已清理中间结果文件")
+        except:
+            pass
     
     # 打印摘要
     print(f"\n" + "=" * 60)

@@ -93,7 +93,7 @@ class AIConfig:
             },
             'deepseek': {
                 'enabled': True,
-                'api_key': os.getenv('DEEPSEEK_API_KEY', 'sk-a1a2cdcabeb045478b1c1b2d4bf8530e'),
+                'api_key': os.getenv('DEEPSEEK_API_KEY', ''),
                 'base_url': 'https://api.deepseek.com',  # 也可以使用 'https://api.deepseek.com/v1'
                 'models': [
                     'deepseek-chat',

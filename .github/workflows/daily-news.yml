@@ -74,7 +74,7 @@ jobs:
         username: ${{ secrets.SMTP_USER }}
         password: ${{ secrets.SMTP_PASSWORD }}
         subject: '每日新闻报告 - ${{ github.run_number }} (${{ github.run_id }})'
-        to: ${{ secrets.EMAIL_TO }}
+        to: ${{ secrets.EMAIL_TO }}  # 多个邮箱用逗号分隔，例如: email1@example.com,email2@example.com
         from: ${{ secrets.SMTP_USER }}
         body: |
           今日新闻处理完成！

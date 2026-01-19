@@ -7,15 +7,15 @@ from urllib.parse import urljoin, urlparse
 import time
 import os
 
-LIMIT_NUM = 50 
+LIMIT_NUM = 1
 
 # 新闻平台首页列表
 homepage_urls = [
     'https://punchng.com/',
-    'https://dailypost.ng/',
-    'https://dailytrust.com/',
-    'https://thesun.ng/',
-    'https://guardian.ng/'
+    'https://dailypost.ng/'
+    # 'https://dailytrust.com/',
+    # 'https://thesun.ng/',
+    # 'https://guardian.ng/'
 ]
 
 # 设置请求头，模拟浏览器访问以避免 403 错误

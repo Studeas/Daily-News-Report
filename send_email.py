@@ -27,6 +27,11 @@ def send_report_email():
         print("   需要设置环境变量: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, EMAIL_TO")
         return False
     
+    # 支持多个邮箱（逗号分隔）
+    # 清理邮箱地址（去除空格）
+    email_list = [email.strip() for email in email_to.split(',')]
+    email_to_clean = ', '.join(email_list)  # 用于显示
+    
     # 查找最新的报告
     today = datetime.now().strftime("%Y%m%d")
     report_dir = f'report/{today}'
@@ -48,12 +53,13 @@ def send_report_email():
         print(f"⚠️  报告目录中没有找到报告文件: {report_dir}")
         return False
     
-    print(f"\n📧 准备发送邮件到: {email_to}")
+    print(f"\n📧 准备发送邮件到: {email_to_clean}")
+    print(f"   收件人数量: {len(email_list)} 个邮箱")
     
     # 创建邮件
     msg = MIMEMultipart()
     msg['From'] = smtp_user
-    msg['To'] = email_to
+    msg['To'] = email_to_clean  # 多个邮箱用逗号分隔
     msg['Subject'] = f'每日新闻报告 - {datetime.now().strftime("%Y-%m-%d")}'
     
     # 邮件正文
@@ -125,7 +131,7 @@ def send_report_email():
         server.login(smtp_user, smtp_password)
         server.send_message(msg)
         server.quit()
-        print(f"  ✓ 邮件已成功发送到: {email_to}")
+        print(f"  ✓ 邮件已成功发送到: {email_to_clean}")
         return True
     except smtplib.SMTPAuthenticationError as e:
         print(f"  ❌ 邮件认证失败: {e}")

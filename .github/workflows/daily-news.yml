@@ -35,8 +35,9 @@ jobs:
         pip install -r requirements.txt
     
     - name: Run crawl and process
+      continue-on-error: true  # Continue even if this step fails
       env:
-        # AI API 密钥（根据你使用的提供商设置）
+        # AI API keys (set according to your provider)
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         DASHSCOPE_API_KEY: ${{ secrets.DASHSCOPE_API_KEY }}
         DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
@@ -46,9 +47,9 @@ jobs:
         TENCENT_SECRET_KEY: ${{ secrets.TENCENT_SECRET_KEY }}
         ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}
         AI_PROVIDER: ${{ secrets.AI_PROVIDER || 'zhipu' }}
-        # Prompt 模板（从 Secrets 读取，隐藏 prompt 内容）
+        # Prompt template (read from Secrets, hide prompt content)
         PROMPT_TEMPLATE: ${{ secrets.PROMPT_TEMPLATE }}
-        # 邮件配置
+        # Email configuration
         SMTP_HOST: ${{ secrets.SMTP_HOST }}
         SMTP_PORT: ${{ secrets.SMTP_PORT }}
         SMTP_USER: ${{ secrets.SMTP_USER }}
@@ -60,23 +61,26 @@ jobs:
     - name: Upload reports as artifact
       uses: actions/upload-artifact@v4
       if: always()  # Upload logs even if failed
+      continue-on-error: true  # Don't fail if no files found
       with:
         name: reports-${{ github.run_number }}-${{ github.run_id }}
         path: |
           report/
           log/
         retention-days: 30  # Keep for 30 days
+        if-no-files-found: warn  # Warn instead of failing if no files
     
     - name: Send email with reports
       uses: dawidd6/action-send-mail@v3
-      if: always()  # 即使失败也发送邮件
+      if: always()  # Send email even if previous steps failed
+      continue-on-error: true  # Don't fail workflow if email sending fails
       with:
         server_address: ${{ secrets.SMTP_HOST }}
         server_port: ${{ secrets.SMTP_PORT }}
         username: ${{ secrets.SMTP_USER }}
         password: ${{ secrets.SMTP_PASSWORD }}
         subject: '每日新闻报告 - ${{ github.run_number }} (${{ github.run_id }})'
-        to: ${{ secrets.EMAIL_TO }}  # 多个邮箱用逗号分隔，例如: email1@example.com,email2@example.com
+        to: ${{ secrets.EMAIL_TO }}  # Multiple emails separated by comma, e.g.: email1@example.com,email2@example.com
         from: ${{ secrets.SMTP_USER }}
         body: |
           今日新闻处理完成！
@@ -91,4 +95,3 @@ jobs:
           report/*/report.json
           report/*/report.md
           log/run_*.log
-        ignore_error: true  # 即使邮件发送失败也不影响工作流

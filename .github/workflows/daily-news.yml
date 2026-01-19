@@ -16,13 +16,13 @@ jobs:
     
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
     
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.12'
-        cache: 'pip'  # 缓存 pip 依赖，加快安装速度
+        cache: 'pip'  # Cache pip dependencies to speed up installation
     
     - name: Install system dependencies
       run: |
@@ -58,14 +58,14 @@ jobs:
         python run.py
     
     - name: Upload reports as artifact
-      uses: actions/upload-artifact@v3
-      if: always()  # 即使失败也上传日志
+      uses: actions/upload-artifact@v4
+      if: always()  # Upload logs even if failed
       with:
         name: reports-${{ github.run_number }}-${{ github.run_id }}
         path: |
           report/
           log/
-        retention-days: 30  # 保留30天
+        retention-days: 30  # Keep for 30 days
     
     - name: Send email with reports
       uses: dawidd6/action-send-mail@v3

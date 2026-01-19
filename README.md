@@ -1,123 +1,77 @@
-# 尼日利亚新闻抓取与AI处理系统
+# 新闻抓取与AI分析系统
 
-## 功能说明
+自动抓取新闻文章，使用AI进行过滤、分类、翻译和摘要生成。
 
-本系统包含两个主要脚本：
+## 快速开始
 
-1. **crawl.py** - 新闻抓取脚本
-   - 从5个尼日利亚新闻平台首页提取新闻链接
-   - 抓取每篇文章的完整内容
-   - 保存为 `articles.json`
-
-2. **process_with_ai.py** - AI处理与报告生成脚本
-   - 使用Google Gemini API对文章进行过滤和翻译
-   - 生成结构化报告（JSON + Markdown格式）
-
-## 安装依赖
+### 安装依赖
 
 ```bash
 pip install -r requirements.txt
 ```
 
-## 配置
+### 配置AI API
 
-### 1. 获取Google Gemini API密钥
-
-1. 访问 [Google AI Studio](https://makersuite.google.com/app/apikey)
-2. 创建API密钥
-3. 设置环境变量：
+设置环境变量（选择一个AI提供商）：
 
 ```bash
-export GEMINI_API_KEY='your-api-key-here'
+# 智谱AI（推荐）
+export ZHIPU_API_KEY='your-api-key'
+export AI_PROVIDER='zhipu'
+
+# 或使用其他提供商
+export GEMINI_API_KEY='your-api-key'      # Google Gemini
+export DASHSCOPE_API_KEY='your-api-key'  # 阿里云通义千问
+export DEEPSEEK_API_KEY='your-api-key'   # DeepSeek
 ```
 
-或者在脚本中直接设置（不推荐，安全性较低）
-
-## 使用方法
-
-### 第一步：抓取新闻
+### 运行
 
 ```bash
-python crawl.py
+python run.py
 ```
 
-这将：
-- 访问5个新闻平台首页
-- 提取新闻链接
-- 抓取文章内容
-- 保存到 `articles.json`
+自动完成新闻抓取、AI处理和报告生成。
 
-### 第二步：AI处理与生成报告
+## 输出文件
 
-```bash
-python process_with_ai.py
-```
+- **数据文件**: `data/news_YYYY-MM-DD.json` - 原始抓取的新闻
+- **报告文件**: `report/YYYYMMDD/report.json` 和 `report.html` - AI处理后的报告
+- **日志文件**: `log/run_YYYYMMDD_HHMMSS.log` - 执行日志
 
-这将：
-- 读取 `articles.json`
-- 使用Gemini API进行：
-  - 文章质量过滤
-  - 分类
-  - 关键信息提取
-  - 中英文翻译
-- 生成两个报告文件：
-  - `news_report.json` - 结构化JSON数据
-  - `news_report.md` - 可读的Markdown报告
+## 支持的AI提供商
 
-## 输出文件说明
+- 智谱AI (ZhipuAI)
+- Google Gemini
+- 阿里云通义千问
+- DeepSeek
+- 腾讯混元
+- OpenAI GPT
+- Anthropic Claude
 
-### articles.json
-原始抓取的新闻数据，包含：
-- 标题、正文、作者、发布日期
-- 来源信息、URL等
+详细配置见 `config.py` 和 `CONFIG_USAGE.md`。
 
-### news_report.json
-AI处理后的结构化数据，包含：
-- 原文数据（original）
-- AI处理结果（processed）：
-  - 中文翻译
-  - 分类
-  - 关键要点
-  - 摘要
-- 元数据（metadata）
+## 自动化部署
 
-### news_report.md
-可读的Markdown格式报告，包含：
-- 数据摘要统计
-- 分类统计
-- 来源统计
-- 每篇文章的详细内容（中英文对照）
+支持 GitHub Actions 自动执行，每天定时抓取并发送邮件报告。
 
-## 注意事项
+配置步骤：
+1. 在 GitHub 仓库设置 Secrets（API密钥、邮件配置等）
+2. 工作流文件：`.github/workflows/daily-news.yml`
+3. 默认执行时间：UTC 12:00
 
-1. **API限流**：Gemini API有请求频率限制，脚本已添加延迟处理
-2. **费用**：使用Gemini API可能产生费用，请查看Google的定价
-3. **网络**：需要稳定的网络连接访问新闻网站和API
-4. **数据量**：如果文章数量很大，处理时间会较长
+## 主要功能
 
-## 故障排除
-
-### Gemini API未初始化
-- 检查是否安装了 `google-generativeai`
-- 检查是否设置了 `GEMINI_API_KEY` 环境变量
-- 检查API密钥是否有效
-
-### 文章提取失败
-- 某些网站可能有反爬虫机制
-- 检查网络连接
-- 可能需要调整 `crawl.py` 中的选择器
-
-### 翻译质量不佳
-- 可以调整 `process_with_ai.py` 中的提示词
-- 尝试使用不同的Gemini模型（如 `gemini-pro-vision`）
+- 自动抓取多个新闻平台
+- AI智能过滤（排除娱乐、体育等非严肃新闻）
+- 自动分类（疾病与灾害、安全形势、涉我舆情等）
+- 中英文翻译
+- 关键信息提取
+- 断点续传（支持中断后继续处理）
+- 邮件自动通知
 
 ## 自定义配置
 
-### 修改新闻源
-编辑 `crawl.py` 中的 `homepage_urls` 列表
-
-### 调整AI处理逻辑
-编辑 `process_with_ai.py` 中的 `process_article_with_ai()` 函数中的提示词
-
-### 修改报告格式
-编辑 `process_with_ai.py` 中的 `generate_markdown_report()` 函数
+- **修改新闻源**: 编辑 `crawl.py` 中的 `homepage_urls`
+- **调整AI提示词**: 编辑 `prompt_template.txt`
+- **切换AI提供商**: 设置 `AI_PROVIDER` 环境变量

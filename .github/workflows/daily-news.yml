@@ -28,6 +28,9 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y chromium-browser chromium-chromedriver
+        # Set Chrome binary path for Selenium
+        echo "CHROME_BIN=/usr/bin/chromium-browser" >> $GITHUB_ENV
+        echo "CHROMIUM_BIN=/usr/bin/chromium-browser" >> $GITHUB_ENV
     
     - name: Install Python dependencies
       run: |
@@ -35,6 +38,7 @@ jobs:
         pip install -r requirements.txt
     
     - name: Run crawl and process
+      id: run_main
       continue-on-error: true  # Continue even if this step fails
       env:
         # AI API keys (set according to your provider)
@@ -46,7 +50,8 @@ jobs:
         TENCENT_SECRET_ID: ${{ secrets.TENCENT_SECRET_ID }}
         TENCENT_SECRET_KEY: ${{ secrets.TENCENT_SECRET_KEY }}
         ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}
-        AI_PROVIDER: ${{ secrets.AI_PROVIDER || 'zhipu' }}
+        # AI Provider: use secret if set, otherwise Python code will use default 'zhipu'
+        AI_PROVIDER: ${{ secrets.AI_PROVIDER }}
         # Prompt template (read from Secrets, hide prompt content)
         PROMPT_TEMPLATE: ${{ secrets.PROMPT_TEMPLATE }}
         # Email configuration
@@ -70,9 +75,52 @@ jobs:
         retention-days: 30  # Keep for 30 days
         if-no-files-found: warn  # Warn instead of failing if no files
     
+    - name: List report files (debug)
+      if: always()
+      run: |
+        echo "=== Checking report files ==="
+        echo "Report directory structure:"
+        find report/ -type f 2>/dev/null | head -20 || echo "No report files found"
+        echo ""
+        echo "Report file sizes:"
+        find report/ -type f \( -name "*.html" -o -name "*.json" -o -name "*.md" \) -exec ls -lh {} \; 2>/dev/null || echo "No report files found"
+        echo ""
+        echo "Log files:"
+        find log/ -type f -name "*.log" 2>/dev/null | head -5 || echo "No log files found"
+    
+    - name: Find report files for email
+      if: always()
+      id: find_reports
+      run: |
+        # Find all report files and create a list
+        REPORT_HTML=$(find report/ -type f -name "*.html" 2>/dev/null | head -1 || echo "")
+        REPORT_JSON=$(find report/ -type f -name "*.json" 2>/dev/null | head -1 || echo "")
+        REPORT_MD=$(find report/ -type f -name "*.md" 2>/dev/null | head -1 || echo "")
+        
+        # Create attachments list (only include files that exist)
+        ATTACHMENTS=""
+        [ -n "$REPORT_HTML" ] && ATTACHMENTS="$ATTACHMENTS$REPORT_HTML"$'\n'
+        [ -n "$REPORT_JSON" ] && ATTACHMENTS="$ATTACHMENTS$REPORT_JSON"$'\n'
+        [ -n "$REPORT_MD" ] && ATTACHMENTS="$ATTACHMENTS$REPORT_MD"$'\n'
+        
+        # Remove trailing newline and save to output
+        ATTACHMENTS=$(echo "$ATTACHMENTS" | sed '/^$/d')
+        
+        if [ -n "$ATTACHMENTS" ]; then
+          echo "attachments<<EOF" >> $GITHUB_OUTPUT
+          echo "$ATTACHMENTS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "has_attachments=true" >> $GITHUB_OUTPUT
+          echo "Found attachments:"
+          echo "$ATTACHMENTS"
+        else
+          echo "has_attachments=false" >> $GITHUB_OUTPUT
+          echo "⚠️  No report files found for email attachment"
+        fi
+    
     - name: Send email with reports
       uses: dawidd6/action-send-mail@v3
-      if: always()  # Send email even if previous steps failed
+      if: always() && steps.find_reports.outputs.has_attachments == 'true'
       continue-on-error: true  # Don't fail workflow if email sending fails
       with:
         server_address: ${{ secrets.SMTP_HOST }}
@@ -83,15 +131,11 @@ jobs:
         to: ${{ secrets.EMAIL_TO }}  # Multiple emails separated by comma, e.g.: email1@example.com,email2@example.com
         from: ${{ secrets.SMTP_USER }}
         body: |
-          今日新闻处理完成！
+          今日新闻汇总完成！
           
           执行编号: ${{ github.run_number }}
           工作流运行ID: ${{ github.run_id }}
           查看详情: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
           
           报告文件已作为附件发送。
-        attachments: |
-          report/*/report.html
-          report/*/report.json
-          report/*/report.md
-          log/run_*.log
+        attachments: ${{ steps.find_reports.outputs.attachments }}

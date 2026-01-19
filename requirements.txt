@@ -7,6 +7,4 @@ openai>=1.0.0
 anthropic>=0.18.0
 dashscope>=1.17.0
 tencentcloud-sdk-python>=3.0.0
-zai>=1.0.0
-cloudscraper>=1.2.71
-selenium>=4.15.0
+zai

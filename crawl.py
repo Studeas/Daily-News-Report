@@ -2,10 +2,11 @@ from newsplease import NewsPlease
 import json
 import requests
 from bs4 import BeautifulSoup
-from datetime import datetime
+from datetime import datetime, timedelta
 from urllib.parse import urljoin, urlparse
 import time
 import os
+from zoneinfo import ZoneInfo
 
 LIMIT_NUM = 25
 
@@ -15,6 +16,7 @@ homepage_urls = [
     'https://dailypost.ng/',
     'https://dailytrust.com/',
     'https://thesun.ng/',
+    'https://www.premiumtimesng.com/',
     # 'https://guardian.ng/'
 ]
 
@@ -28,6 +30,63 @@ headers = {
 }
 
 request_args = {'headers': headers}
+
+# Nigeria timezone (Africa/Lagos, UTC+1)
+NIGERIA_TZ = ZoneInfo('Africa/Lagos')
+
+def convert_to_nigeria_time(dt_str_or_dt):
+    """
+    Convert a datetime string or datetime object to Nigeria time (Africa/Lagos).
+    If input is a string, parse it and convert to Nigeria timezone.
+    If input is a datetime, convert it to Nigeria timezone.
+    Returns ISO format string in Nigeria timezone.
+    """
+    if dt_str_or_dt is None:
+        return None
+    
+    try:
+        dt = None
+        
+        # If it's already a datetime object
+        if isinstance(dt_str_or_dt, datetime):
+            dt = dt_str_or_dt
+        else:
+            # If it's a string, parse it
+            dt_str = str(dt_str_or_dt).strip()
+            # Clean up the string (handle 'Z' suffix)
+            dt_str_clean = dt_str.replace('Z', '+00:00')
+            
+            # Parse the datetime
+            try:
+                dt = datetime.fromisoformat(dt_str_clean)
+            except ValueError:
+                # Try parsing without timezone info
+                dt = datetime.fromisoformat(dt_str)
+        
+        # If datetime is naive (no timezone), we need to determine its timezone
+        if dt.tzinfo is None:
+            # For date_download, it's likely in local timezone
+            # Get the current local timezone
+            try:
+                # Try to get local timezone from system
+                local_tz = datetime.now().astimezone().tzinfo
+                if local_tz:
+                    dt = dt.replace(tzinfo=local_tz)
+                else:
+                    # Fallback to UTC if can't determine
+                    dt = dt.replace(tzinfo=ZoneInfo('UTC'))
+            except Exception:
+                # Fallback to UTC
+                dt = dt.replace(tzinfo=ZoneInfo('UTC'))
+        
+        # Convert to Nigeria time
+        dt_nigeria = dt.astimezone(NIGERIA_TZ)
+        return dt_nigeria.isoformat()
+        
+    except Exception as e:
+        # If conversion fails, return original value
+        print(f"    ⚠ 时区转换失败: {str(e)[:50]}")
+        return dt_str_or_dt if isinstance(dt_str_or_dt, str) else str(dt_str_or_dt)
 
 def extract_article_links(homepage_url, soup):
     """
@@ -194,7 +253,48 @@ for homepage_url in homepage_urls:
                     if article_data:
                         article_data['homepage_title'] = homepage_title
                         article_data['homepage_source'] = homepage_url
-                        article_data['extracted_at'] = datetime.now().isoformat()
+                        # Convert extracted_at to Nigeria time
+                        article_data['extracted_at'] = convert_to_nigeria_time(datetime.now())
+                    
+                    # Convert date_download to Nigeria timezone for consistency
+                    if article_data and 'date_download' in article_data:
+                        article_data['date_download'] = convert_to_nigeria_time(article_data['date_download'])
+                    
+                    # Convert date_publish to Nigeria timezone (assuming it's already in Nigeria time, but ensure consistency)
+                    if article_data and 'date_publish' in article_data and article_data['date_publish']:
+                        article_data['date_publish'] = convert_to_nigeria_time(article_data['date_publish'])
+                    
+                    # Time filter: skip articles published more than 48 hours before download
+                    if article_data and 'date_publish' in article_data and 'date_download' in article_data:
+                        try:
+                            date_publish_str = article_data.get('date_publish')
+                            date_download_str = article_data.get('date_download')
+                            
+                            # Only filter if both dates are available and not None
+                            if date_publish_str and date_download_str:
+                                # Parse datetime strings (both should now be in Nigeria timezone)
+                                date_publish_str_clean = str(date_publish_str).replace('Z', '+00:00')
+                                date_download_str_clean = str(date_download_str).replace('Z', '+00:00')
+                                
+                                date_publish = datetime.fromisoformat(date_publish_str_clean)
+                                date_download = datetime.fromisoformat(date_download_str_clean)
+                                
+                                # Ensure both are timezone-aware (should be after conversion)
+                                if date_publish.tzinfo is None:
+                                    date_publish = date_publish.replace(tzinfo=NIGERIA_TZ)
+                                if date_download.tzinfo is None:
+                                    date_download = date_download.replace(tzinfo=NIGERIA_TZ)
+                                
+                                # Calculate time difference
+                                time_diff = date_download - date_publish
+                                
+                                # Skip if published more than 48 hours before download
+                                if time_diff > timedelta(hours=48):
+                                    print(f"    ⏭ 跳过（发布时间早于下载时间超过48小时: {time_diff.days}天{time_diff.seconds//3600}小时）")
+                                    continue
+                        except (ValueError, TypeError, AttributeError) as e:
+                            # If date parsing fails, continue with the article
+                            print(f"    ⚠ 时间解析失败，继续处理: {str(e)[:30]}")
                     
                     all_articles.append(article_data)
                     total_articles_extracted += 1

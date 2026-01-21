@@ -60,8 +60,10 @@ def process_article_with_ai(ai_client: AIClient, article: Dict) -> Optional[Dict
     source = article.get('source_domain', '')
     
     # If main text is too short, might not be a complete article
+    # But still process it, just mark it as potentially incomplete
     if not maintext or len(maintext) < 100:
-        return None
+        print(f"  ⚠️  文章内容过短（{len(maintext) if maintext else 0} 字符），可能不完整")
+        # Still process it, but will be marked as invalid if AI confirms
     
     # Limit main text length (to avoid token limits)
     maintext_preview = maintext[:3000] if len(maintext) > 3000 else maintext
@@ -116,12 +118,63 @@ def process_article_with_ai(ai_client: AIClient, article: Dict) -> Optional[Dict
                 }
             else:
                 print(f"  ⚠️  AI处理失败: {error}")
-                return None
+                # Return article with original content, marked as processing failed
+                return {
+                    "original": {
+                        "title": title,
+                        "description": description,
+                        "maintext": maintext,
+                        "authors": authors,
+                        "date_publish": date_publish,
+                        "source_domain": source,
+                        "url": article.get('url', ''),
+                        "homepage_source": article.get('homepage_source', ''),
+                    },
+                    "processed": {
+                        "is_valid": True,  # Keep as valid to preserve content
+                        "category": "其他",
+                        "key_points": [],
+                        "title_zh": title,  # Use original title as fallback
+                        "description_zh": description or "",  # Use original description as fallback
+                        "summary_zh": f"AI处理失败: {error}",
+                        "maintext_zh": maintext[:500] if maintext else "",  # Preserve original content (truncated)
+                    },
+                    "metadata": {
+                        "processed_at": datetime.now().isoformat(),
+                        "source": f"error_{ai_client.provider}",
+                        "error": error
+                    }
+                }
         
         result_text = response.get('text', '')
         if not result_text:
-            print(f"  ⚠️  响应中没有文本内容")
-            return None
+            print(f"  ⚠️  响应中没有文本内容，保留原始内容")
+            # Return article with original content
+            return {
+                "original": {
+                    "title": title,
+                    "description": description,
+                    "maintext": maintext,
+                    "authors": authors,
+                    "date_publish": date_publish,
+                    "source_domain": source,
+                    "url": article.get('url', ''),
+                    "homepage_source": article.get('homepage_source', ''),
+                },
+                "processed": {
+                    "is_valid": True,
+                    "category": "其他",
+                    "key_points": [],
+                    "title_zh": title,
+                    "description_zh": description or "",
+                    "summary_zh": "AI响应为空，保留原始内容",
+                    "maintext_zh": maintext[:1000] if maintext else "",  # Preserve original content (truncated)
+                },
+                "metadata": {
+                    "processed_at": datetime.now().isoformat(),
+                    "source": f"empty_response_{ai_client.provider}"
+                }
+            }
         
         # Try to extract JSON (might be returned in markdown code block format)
         if '```json' in result_text:
@@ -149,7 +202,7 @@ def process_article_with_ai(ai_client: AIClient, article: Dict) -> Optional[Dict
         # Merge original data and AI processing results
         is_valid = ai_result.get('is_valid', False)
         
-        # If article is invalid (filtered), ensure all fields are empty
+        # If article is invalid (filtered), still preserve original content for reference
         if not is_valid:
             processed_article = {
                 "original": {
@@ -164,12 +217,12 @@ def process_article_with_ai(ai_client: AIClient, article: Dict) -> Optional[Dict
                 },
                 "processed": {
                     "is_valid": False,
-                    "category": "",  # Invalid article, category is empty
-                    "key_points": [],  # Invalid article, key points are empty
-                    "title_zh": "",  # Invalid article, no translation
-                    "description_zh": "",  # Invalid article, no translation
-                    "summary_zh": "",  # Invalid article, no translation
-                    "maintext_zh": "",  # Invalid article, no translation
+                    "category": "其他",  # Keep category for display
+                    "key_points": [],
+                    "title_zh": title,  # Keep original title for reference
+                    "description_zh": description or "",  # Keep original description
+                    "summary_zh": "该文章被AI标记为无效（非严肃新闻：花边/娱乐/体育/养生保健等）",
+                    "maintext_zh": maintext[:500] if maintext else "",  # Keep truncated original content for reference
                 },
                 "metadata": {
                     "processed_at": datetime.now().isoformat(),
@@ -211,10 +264,62 @@ def process_article_with_ai(ai_client: AIClient, article: Dict) -> Optional[Dict
         print(f"  ⚠️  JSON解析失败: {e}")
         if 'result_text' in locals():
             print(f"  响应内容: {result_text[:200]}")
-        return None
+        # Return article with original content when JSON parsing fails
+        return {
+            "original": {
+                "title": title,
+                "description": description,
+                "maintext": maintext,
+                "authors": authors,
+                "date_publish": date_publish,
+                "source_domain": source,
+                "url": article.get('url', ''),
+                "homepage_source": article.get('homepage_source', ''),
+            },
+            "processed": {
+                "is_valid": True,
+                "category": "其他",
+                "key_points": [],
+                "title_zh": title,
+                "description_zh": description or "",
+                "summary_zh": f"JSON解析失败，保留原始内容。错误: {str(e)[:100]}",
+                "maintext_zh": maintext[:1000] if maintext else "",
+            },
+            "metadata": {
+                "processed_at": datetime.now().isoformat(),
+                "source": f"json_error_{ai_client.provider}",
+                "error": str(e)
+            }
+        }
     except Exception as e:
         print(f"  ⚠️  AI处理失败: {e}")
-        return None
+        # Return article with original content when exception occurs
+        return {
+            "original": {
+                "title": title,
+                "description": description,
+                "maintext": maintext,
+                "authors": authors,
+                "date_publish": date_publish,
+                "source_domain": source,
+                "url": article.get('url', ''),
+                "homepage_source": article.get('homepage_source', ''),
+            },
+            "processed": {
+                "is_valid": True,
+                "category": "其他",
+                "key_points": [],
+                "title_zh": title,
+                "description_zh": description or "",
+                "summary_zh": f"处理异常，保留原始内容。错误: {str(e)[:100]}",
+                "maintext_zh": maintext[:1000] if maintext else "",
+            },
+            "metadata": {
+                "processed_at": datetime.now().isoformat(),
+                "source": f"exception_{ai_client.provider}",
+                "error": str(e)
+            }
+        }
 
 def find_latest_articles_file() -> Optional[str]:
     """Find the latest article JSON file from the data folder"""
@@ -735,6 +840,12 @@ def main():
             
             print(f"\n[{i}/{len(articles)}] 处理: {article.get('title', '无标题')[:50]}...")
             
+            # Debug: Check article content
+            maintext_len = len(article.get('maintext', ''))
+            print(f"  文章内容长度: {maintext_len} 字符")
+            if maintext_len < 100:
+                print(f"  ⚠️  警告: 文章内容过短，可能影响处理结果")
+            
             if ai_client:
                 processed = process_article_with_ai(ai_client, article)
                 if processed:
@@ -750,7 +861,11 @@ def main():
                         save_intermediate_results(processed_articles, report_date_dir)
                     
                     if processed['processed']['is_valid']:
+                        content_len = len(processed['processed'].get('maintext_zh', ''))
                         print(f"  ✓ 有效文章 - 分类: {processed['processed']['category']}")
+                        print(f"  中文内容长度: {content_len} 字符")
+                        if content_len == 0:
+                            print(f"  ⚠️  警告: 中文内容为空，可能AI处理失败")
                     else:
                         print(f"  ✗ 无效文章（已过滤）")
                 else:

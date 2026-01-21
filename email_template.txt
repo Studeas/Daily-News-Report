@@ -1,0 +1,13 @@
+{greeting}
+
+今日新闻收集、汇总、处理完成！请查收。
+
+日期: {date}
+时间: {time}
+{weather_section}
+
+报告文件:
+
+{report_files}
+
+所有文件已作为附件发送。

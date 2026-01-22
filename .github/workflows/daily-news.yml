@@ -53,6 +53,8 @@ jobs:
         TENCENT_SECRET_ID: ${{ secrets.TENCENT_SECRET_ID }}
         TENCENT_SECRET_KEY: ${{ secrets.TENCENT_SECRET_KEY }}
         ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}
+        # Weather API key
+        OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
         # AI Provider: use secret if set, otherwise Python code will use default 'zhipu'
         AI_PROVIDER: ${{ secrets.AI_PROVIDER }}
         # Prompt template (read from Secrets, hide prompt content)
